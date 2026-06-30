@@ -93,6 +93,10 @@ namespace WorldBuilder
       {
         class Interface;
       }  // namespace Temperature
+      namespace Density
+      {
+        class Interface;
+      }  // namespace Temperature
     }  // namespace FaultModels
   }  // namespace Features
 }  // namespace WorldBuilder
@@ -3704,12 +3708,13 @@ TEST_CASE("WorldBuilder Types: Segment Object")
   const WorldBuilder::Point<2> thickness(1,2,invalid);
   const WorldBuilder::Point<2> top_truncation(3,4,invalid);
   const WorldBuilder::Point<2> angle(5,6,invalid);
-  Objects::TYPE<Features::FaultModels::Temperature::Interface, Features::FaultModels::Composition::Interface, Features::FaultModels::Grains::Interface, Features::FaultModels::Velocity::Interface>
+  Objects::TYPE<Features::FaultModels::Temperature::Interface, Features::FaultModels::Composition::Interface, Features::FaultModels::Grains::Interface, Features::FaultModels::Velocity::Interface, Features::FaultModels::Density::Interface>
   type (1.0, thickness, top_truncation, angle,
         std::vector<std::shared_ptr<Features::FaultModels::Temperature::Interface> >(),
         std::vector<std::shared_ptr<Features::FaultModels::Composition::Interface> >(),
         std::vector<std::shared_ptr<Features::FaultModels::Grains::Interface> >(),
-        std::vector<std::shared_ptr<Features::FaultModels::Velocity::Interface> >());
+        std::vector<std::shared_ptr<Features::FaultModels::Velocity::Interface> >(),
+        std::vector<std::shared_ptr<Features::FaultModels::Density::Interface> >());
   CHECK(type.value_length == Approx(1.0));
   CHECK(type.value_thickness[0] == Approx(1.0));
   CHECK(type.value_thickness[1] == Approx(2.0));
@@ -3718,7 +3723,7 @@ TEST_CASE("WorldBuilder Types: Segment Object")
   CHECK(type.value_angle[0] == Approx(5.0));
   CHECK(type.value_angle[1] == Approx(6.0));
 
-  const Objects::TYPE<Features::FaultModels::Temperature::Interface, Features::FaultModels::Composition::Interface, Features::FaultModels::Grains::Interface, Features::FaultModels::Velocity::Interface>
+  const Objects::TYPE<Features::FaultModels::Temperature::Interface, Features::FaultModels::Composition::Interface, Features::FaultModels::Grains::Interface, Features::FaultModels::Velocity::Interface, Features::FaultModels::Density::Interface>
   &type_copy(type);
   const double &value_length = type_copy.value_length;
   CHECK(value_length == Approx(1.0));
@@ -4022,7 +4027,10 @@ TEST_CASE("WorldBuilder Parameters")
   approval_tests.emplace_back("1",std::isinf(world.parameters.coordinate_system->max_model_depth()));
 
   Parameters prm(world);
-  prm.initialize(file);
+  std::ifstream input_file_stream(file);
+  std::stringstream input_stream;
+  input_stream << input_file_stream.rdbuf();
+  prm.initialize(input_stream);
 
   world.parameters.coordinate_system.swap(prm.coordinate_system);
 
@@ -8100,4 +8108,20 @@ TEST_CASE("WorldBuilder Utilities function: calculate_effective_trench_and_plate
   const double distance_along_plane_4 = 1000e3;
   CHECK_THROWS_WITH(Utilities::calculate_effective_trench_and_plate_ages(ridge_parameters_4, distance_along_plane_4),
                     Contains("The age of trench at subducting initiation is less than 0. "));
+}
+
+TEST_CASE("WorldBuilder composition property maps")
+{
+  std::vector<std::pair<std::string,double>> approval_tests;
+
+  const std::string file_name = WorldBuilder::Data::WORLD_BUILDER_SOURCE_DIR + "/tests/data/composition_properties_map.wb";
+  WorldBuilder::World world(file_name);
+
+  world.parse_entries(world.parameters);
+
+  CHECK(world.composition_properties[0].index == 0);
+  CHECK(world.composition_properties[0].name == "0");
+
+  CHECK(world.composition_properties[1].name == "harzburgite");
+  CHECK(world.composition_properties[3].reference_density == Approx(3350.0));
 }

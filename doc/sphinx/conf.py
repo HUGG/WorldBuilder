@@ -20,8 +20,8 @@
 project = 'Geodynamic World Builder'
 copyright = '2026, The authors of the Geodynamic World Builder'
 # The full version, including alpha/beta/rc tags
-release = '1.1.0-pre'
-html_title = "Manual GWB 1.1.0-pre"
+release = '1.2.0-pre'
+html_title = "Manual GWB 1.2.0-pre"
 
 
 # -- General configuration ---------------------------------------------------
@@ -42,7 +42,14 @@ bibtex_default_style = 'plain'
 
 bibtex_bibfiles = ['bibliography.bib']
 
-myst_enable_extensions = ["colon_fence"]
+myst_enable_extensions = [    
+    "colon_fence",
+    "deflist",
+    "fieldlist",
+    "substitution",
+    "dollarmath",
+    "amsmath",
+]
 
 # Breathe Configuration
 breathe_default_project = "GWB"

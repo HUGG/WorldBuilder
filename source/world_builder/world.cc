@@ -30,6 +30,7 @@
 #include "world_builder/types/double.h"
 #include "world_builder/types/object.h"
 #include "world_builder/types/plugin_system.h"
+#include "world_builder/types/composition_property.h"
 #include "world_builder/types/point.h"
 #include "world_builder/types/int.h"
 
@@ -58,6 +59,8 @@ namespace WorldBuilder
     :
     parameters(*this),
     surface_coord_conversions(invalid),
+    compensation_pressure(0.),
+    reference_profile_point(invalid),
     dim(NaN::ISNAN),
     random_number_engine(random_number_seed),
     limit_debug_consistency_checks(limit_debug_consistency_checks_)
@@ -94,9 +97,40 @@ namespace WorldBuilder
 
     WorldBuilder::World::declare_entries(parameters);
 
-    parameters.initialize(filename, has_output_dir, output_dir);
+    std::stringstream input_stream(WorldBuilder::Utilities::read_and_distribute_file_content(filename));
+    parameters.initialize(input_stream, has_output_dir, output_dir);
 
     this->parse_entries(parameters);
+
+    // If values are given, generate reference profile.
+    if (!std::isnan(reference_profile_point[0]) && !std::isnan(reference_profile_point[1]))
+      {
+        // Set the x-y reference point to integrate from.
+        const CoordinateSystem coordinate_system = parameters.coordinate_system->natural_coordinate_system();
+        Point<3> point({{reference_profile_point[0], reference_profile_point[1], 0}}, coordinate_system);
+
+        // Get initial density value. TODO: Does this always start at zero, and
+        // need to test that it works when multiple compositions are present.
+        double density_prev = this->properties(point.get_array(), 0., {{{7,0,0}}})[0];
+
+        // Loop along reference profile to calculate a compensation pressure using the trapezoidal method.
+        const double gravity = this->parameters.gravity_model->gravity_norm(point);
+        const double dz = compensation_depth / (number_integration_points - 1);
+        for (unsigned int i = 1; i < number_integration_points; ++i)
+          {
+            // Calculate position along the line
+            const double z = i * dz;
+
+            // Calculate density at this point
+            double density = this->properties(point.get_array(), z, {{{7,0,0}}})[0];
+
+            // Trapezoidal step
+            compensation_pressure += 0.5 * (density + density_prev) * dz * gravity;
+
+            density_prev = density;
+          }
+      }
+
   }
 
   World::~World()
@@ -114,6 +148,8 @@ namespace WorldBuilder
 
       prm.declare_entry("cross section", Types::Array(Types::Point<2>(),2,2),"This is an array of two points along where the cross section is taken");
 
+      prm.declare_entry("composition properties", Types::Array(Types::CompositionProperty()),
+                        "The material properties of the composition. This stores user-defined indices (required), linked to composition properties (optional) including name and reference density.");
       prm.declare_entry("potential mantle temperature", Types::Double(1600),
                         "The potential temperature of the mantle at the surface in Kelvin.");
       prm.declare_entry("surface temperature", Types::Double(293.15),
@@ -148,6 +184,18 @@ namespace WorldBuilder
       prm.declare_entry("random number seed", Types::Int(-1),
                         "This allows the input of a preferred random number seed to generate random numbers."
                         " If no input is given, this value is -1 and triggers the use of default seed = 1.");
+
+      prm.declare_entry("background density", Types::Double(3300),
+                        "Density for the background material without any compositions.");
+
+      prm.declare_entry("compensation depth", Types::Double(250e3),
+                        "Compensation depth for isostatic topography.");
+
+      prm.declare_entry("number of integration points", Types::Int(100),
+                        "Number of integration points for calculating the compensation pressure.");
+
+      prm.declare_entry("reference profile point", Types::Point<2>(),
+                        "This is an X-Y point used to calculate the reference compensation pressure.");
 
     }
     prm.leave_subsection();
@@ -237,6 +285,26 @@ namespace WorldBuilder
     thermal_diffusivity = prm.get<double>("thermal diffusivity");
 
     /**
+     * Density parameters.
+     */
+    background_density = prm.get<double>("background density");
+
+    /**
+     * Compensation depth for isostasy.
+     */
+    compensation_depth = prm.get<double>("compensation depth");
+
+    /**
+     * Number of integration points for isostasy.
+     */
+    number_integration_points = prm.get<unsigned int>("number of integration points");
+
+    /**
+     * Reference point for isostasy.
+     */
+    reference_profile_point = prm.get<Point<2>>("Reference profile point");
+
+    /**
      * Model discretization parameters
      */
     maximum_distance_between_coordinates = prm.get<double>("maximum distance between coordinates");
@@ -251,9 +319,19 @@ namespace WorldBuilder
       random_number_engine.seed(static_cast<unsigned int>(local_seed+MPI_RANK));
 
     /**
-     * Now load the features. Some features use for example temperature values,
-     * so it is important that this is parsed the last.
+     * A map storing composition indices (required) and their properties (optional).
+     * Parsing is handled in parameters.cc
+     * Struct with default values is defined in types/composition_property
      */
+    for (const Parameters::composition_property &cp_parsed : prm.get_composition_properties("composition properties"))
+      {
+        composition_properties.emplace(cp_parsed.index, cp_parsed);
+      }
+
+    /**
+    * Now load the features. Some features use for example temperature values,
+    * so it is important that this is parsed the last.
+    */
     prm.enter_subsection("features");
     {
       for (unsigned int i = 0; i < prm.features.size(); ++i)
@@ -300,6 +378,11 @@ namespace WorldBuilder
               break;
             }
             case 6: // topography
+            {
+              n_output_entries += 1;
+              break;
+            }
+            case 7: // density
             {
               n_output_entries += 1;
               break;
@@ -395,6 +478,11 @@ namespace WorldBuilder
               counter += 1;
               break;
             }
+            case 7: // density
+            {
+              counter += 1;
+              break;
+            }
             default:
               WBAssertThrow(false,
                             "Internal error: Unimplemented property provided. " <<
@@ -486,6 +574,16 @@ namespace WorldBuilder
               properties_local.emplace_back(properties[i_property]);
               break;
             }
+            case 7: // density
+            {
+              entry_in_output.emplace_back(output.size());
+
+              // TODO: If a mantle adiabatic temperature is used then the background
+              // density should account for it.
+              output.emplace_back(background_density);
+              properties_local.emplace_back(properties[i_property]);
+              break;
+            }
             default:
               WBAssertThrow(false,
                             "Internal error: Unimplemented property provided. " <<
@@ -546,8 +644,6 @@ namespace WorldBuilder
   {
     return properties(point, depth, {{{2,composition_number,0}}})[0];
   }
-
-
 
   WorldBuilder::grains
   World::grains(const std::array<double,2> &point,

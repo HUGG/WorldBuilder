@@ -91,11 +91,11 @@ namespace WorldBuilder
 
       /**
        * Initializes the parameter file
-       * \param filename A string with the path to the world builder file
+       * \param input_stream A string stream with the content of the world builder file
        * \param has_output_dir A bool indicating whether the world builder may write out information.
        * \param output_dir A string with the path to the directory where it can output information if allowed by has_output_dir
        */
-      void initialize(std::string &filename, bool has_output_dir = false, const std::string &output_dir = "");
+      void initialize(std::stringstream &input_stream, bool has_output_dir = false, const std::string &output_dir = "");
 
       /**
        * A generic get function to retrieve setting from the parameter file.
@@ -137,8 +137,8 @@ namespace WorldBuilder
        * This version is designed for the plugin system.
        * \param name The name of the entry to retrieved
        */
-      template<class T, class A, class B, class C, class D>
-      std::vector<T> get_vector(const std::string &name, std::vector<std::shared_ptr<A> > &, std::vector<std::shared_ptr<B> > &, std::vector<std::shared_ptr<C> > &, std::vector<std::shared_ptr<D> > &);
+      template<class T, class A, class B, class C, class D, class E>
+      std::vector<T> get_vector(const std::string &name, std::vector<std::shared_ptr<A> > &, std::vector<std::shared_ptr<B> > &, std::vector<std::shared_ptr<C> > &, std::vector<std::shared_ptr<D> > &, std::vector<std::shared_ptr<E> > &);
 
       /**
        * A specialized version of get which can return unique pointers.
@@ -180,6 +180,22 @@ namespace WorldBuilder
        */
       bool
       check_entry(const std::string &name) const;
+
+      struct composition_property
+      {
+        unsigned int index;
+        std::string name;
+        double reference_density;
+      };
+
+      /**
+       * Parse composition properties.
+       * The index is required, while name and reference density are optional.
+       * If the entry is absent, the vector is empty.
+       * \param name The name of the entry to be declared
+       */
+      std::vector<composition_property>
+      get_composition_properties(const std::string &name) const;
 
       /**
        * Declares the existence an entry in the parameters class.
