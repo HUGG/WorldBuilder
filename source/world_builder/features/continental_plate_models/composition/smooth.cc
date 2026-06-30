@@ -1,4 +1,4 @@
-#include "world_builder/features/oceanic_plate_models/composition/smooth.h"
+#include "world_builder/features/continental_plate_models/composition/smooth.h"
 
 #include <world_builder/assert.h>
 #include <world_builder/nan.h>
@@ -20,7 +20,7 @@ namespace WorldBuilder
 
   namespace Features
   {
-    namespace OceanicPlateModels
+    namespace ContinentalPlateModels
     {
       namespace Composition
       {
@@ -110,8 +110,8 @@ namespace WorldBuilder
             } // Check bounds for global depths
           return composition;
         } // function get_composition
-        WB_REGISTER_FEATURE_OCEANIC_PLATE_COMPOSITION_MODEL(Smooth, smooth)
+        WB_REGISTER_FEATURE_CONTINENTAL_PLATE_COMPOSITION_MODEL(Smooth, smooth)
       } // namespace Composition
-    } // namespace OceanicPlateModels
+    } // namespace ContinentalPlateModels
   } // namespace Features
 } // namespace WorldBuilder
